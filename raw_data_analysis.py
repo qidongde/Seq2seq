@@ -20,7 +20,9 @@ feature_name_list = ['lat', 'lon', 'Height', 'Pressure', 'Land_flag', 'PBLH', 'P
 
 def feature_profile_analysis(num):
     feature_selected = all_features_flat[:, num]
-    # feature_selected = np.where(feature_selected != 0, np.log(feature_selected), 0)
+    feature_selected = np.log(feature_selected + np.percentile(feature_selected, 25))
+    # feature_selected = np.where(feature_selected <= 0, -np.power(-feature_selected, 1 / 3),
+    #                             np.power(feature_selected, 1 / 3))
     plt.figure(figsize=(8, 4))
     sns.distplot(feature_selected, bins=100, hist=True, kde=False, norm_hist=False,
                  rug=False, vertical=False, label='Distplot',
@@ -32,5 +34,15 @@ def feature_profile_analysis(num):
     plt.show()
 
 
+def feature_relation_analysis():
+    SO2_data = all_features_flat[:, 15]
+    DMSflux_data = all_features_flat[:, -2]
+    DMSconc_data = all_features_flat[:, -1]
+    data_df = pd.DataFrame({'SO2': SO2_data, 'DMSflux': DMSflux_data, 'DMSconc': DMSconc_data})
+    sns.pairplot(data_df)
+    plt.show()
+
+
 if __name__ == '__main__':
-    feature_profile_analysis(26)
+    # feature_profile_analysis(6)
+    feature_relation_analysis()

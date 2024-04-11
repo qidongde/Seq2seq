@@ -146,3 +146,58 @@ Bsp_Mie = aerosol_optical_properties(Dp,dlnDp,n,m,wl)*1e6
 Bsp_Mie = Bsp_Mie'
 
 save( 'uhsas_data_2024.mat', 'size_dist_median_hourly','sum_median_hourly', "Bsp_Mie",'time_vec_hourly_','time_stamp','Dp_bounds');
+
+%% Neph hourly data
+clear;
+filename = 'E:\wustl\size distribution\target clean\scattering coe\Neph_2014.mat';
+load(filename);
+
+% findgroups
+time_vec = datevec(Time_Neph);
+[G,year,month,day,hour] = findgroups(time_vec(:,1),time_vec(:,2),time_vec(:,3),time_vec(:,4));
+time_vec_hourly = [year month day hour];
+Neph_time_vec = [time_vec_hourly,30*ones(size(time_vec_hourly,1),1),zeros(size(time_vec_hourly,1),1)];
+Neph_time_stamp = datenum(Neph_time_vec);
+
+% Hourly scattering coef
+Bsp_median_hourly = splitapply(@median,Bs_RGB(:,2),G);
+
+save( 'Reph_data_2014.mat', "Bsp_median_hourly",'Neph_time_vec','Neph_time_stamp');
+
+%% compare Bsp from Neph and Mie theory
+
+clear;
+
+load('uhsas_data_2014.mat');
+load('Reph_data_2014.mat');
+
+daterange = [datenum(2014,3,17,4,0,0) datenum(2014,4,17,4,0,0)];
+
+ax2 = axes();
+% ax2 = axes('Position',[0.08 0.5 0.8 0.25]);
+
+Neph_label = find(Neph_time_stamp>=daterange(1) & Neph_time_stamp<daterange(2)+1/24);
+plot(Neph_time_stamp(Neph_label),Bsp_median_hourly(Neph_label));
+
+hold on;
+Mie_label = find(time_stamp>=daterange(1) & time_stamp<daterange(2)+1/24);
+scatter(time_stamp(Mie_label),Bsp_Mie(Mie_label),'.');
+hold off;
+
+legend('Neph','Mie')
+
+set(ax2,'FontSize',12)
+datetick('x','yyyy-mm-dd')
+% xlim(daterange)
+% ax2.XTickLabel = '';
+% ax2.YLabel.String = 'Bsp(1/Mm)';
+% ax2.YLabel.FontSize = 15;
+ax2.XAxis.MinorTick = 'on';
+ax2.XAxis.MinorTickValues = [daterange(1):5:daterange(2)];
+% ax2.XAxis.TickDirection = 'out';
+% ax2.YAxis.MinorTick = 'on';
+% ax2.YAxis.TickDirection = 'out';
+% ax2.YLim = [0 1];
+title('Scattering Coef','FontSize',15)
+
+% linkaxes([ax1 ax2],'x')

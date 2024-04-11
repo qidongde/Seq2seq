@@ -118,3 +118,31 @@ linkaxes([ax1 ax2],'x')
 
 
 % savefig('figname')
+
+
+%% scattering coefficient
+
+clear;
+
+load('Uhsas_2024_hourly.mat');
+load('UHSAS_2014.mat','Dp_bounds');
+
+time_vec_hourly_ = [time_vec_hourly,30*ones(size(time_vec_hourly,1),1),zeros(size(time_vec_hourly,1),1)];
+time_stamp = datenum(time_vec_hourly_);
+
+% Dp, geometric mean value of boundaries, unit m, (1,99)
+Dp = geomean(Dp_bounds,1)/1e9;
+% dlnDp, logarithmic difference of particle diameter boundaries, (1,99)
+dlnDp = log(Dp_bounds(2,:)./Dp_bounds(1,:));
+% n, size distribution (dN/dlnDp) cm^-3, 2 dimensional, (sample_num,99)
+n = size_dist_median_hourly;
+% m, refractive index, related to components, default=1.5
+m = 1.5;
+% wl, wavelength, unit m, default=550*1e-9, green light
+wl = 550*1e-9;
+
+% scattering coefficient by Mie theory
+Bsp_Mie = aerosol_optical_properties(Dp,dlnDp,n,m,wl)*1e6
+Bsp_Mie = Bsp_Mie'
+
+save( 'uhsas_data_2024.mat', 'size_dist_median_hourly','sum_median_hourly', "Bsp_Mie",'time_vec_hourly_','time_stamp','Dp_bounds');

@@ -201,3 +201,102 @@ ax2.XAxis.MinorTickValues = [daterange(1):5:daterange(2)];
 title('Scattering Coef','FontSize',15)
 
 % linkaxes([ax1 ax2],'x')
+
+
+%% visualization
+
+clear;
+
+load('agg_data_2018.mat');
+
+daterange = [datenum(2018,5,1,0,0,0) datenum(2018,8,30,0,0,0)];
+
+
+title_string = {'UHSAS heated','CN', 'Bse'};
+fig = figure;
+set(fig,'Color','w','Position',[100 100 1200 800])
+
+tiledlayout(2,1)
+
+
+% UHSAS_heated
+ax1 = axes('Position',[0.08 0.08 0.80 0.25]);
+% ax1 = nexttile;
+time_uhsas_heated = datenum(uhsas_time_vec_hourly)
+idx_uhsas_heated = find(time_uhsas_heated>=daterange(1) & time_uhsas_heated<daterange(2)+1/24);
+
+tmp1 = uhsas_size_dist(idx_uhsas_heated,:)
+PC1 = pcolor(time_uhsas_heated(idx_uhsas_heated),uhsas_Dp_bins,tmp1');
+
+set(PC1,'EdgeColor','none')
+caxis([0 1200])
+ax1.YScale = 'log';
+set(ax1,'FontSize',12)
+xlim(daterange)
+datetick('x','yyyy-mm-dd')
+% ax1.XTickLabel = '';
+ax1.YLabel.String = 'D_p (nm)';
+ax1.YLabel.FontSize = 15;
+ax1.XAxis.MinorTick = 'off';
+ax1.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax1.XAxis.TickDirection = 'out';
+ax1.YAxis.MinorTick = 'on';
+ax1.YAxis.TickDirection = 'out';
+ax1.YLim = [60 1000];
+title(title_string{1},'FontSize',15)
+
+h1 = colorbar('v');
+h1.Limits = [0 1200];
+colormap(jet)
+h1.Position = [0.89 0.08 0.015 0.25];
+h1.FontSize = 12;
+h1.Label.String = 'd{\itN}/d{\itlogD_p} (cm^{–3})';
+h1.Label.FontSize = 15;
+h1.Ticks = [0:300:1200];
+h1.TickDirection = 'out';
+h1.TickLength = 0.03;
+
+% 'UHSAS vs CPC'
+ax2 = axes('Position',[0.08 0.38 0.80 0.25]);
+% ax2 = nexttile;
+time_cn = datenum(cn_time_label_match);
+idx_label_cn = find(time_cn>=daterange(1) & time_cn<daterange(2)+1/24);
+plot(time_cn(idx_label_cn),cn_uhsas_data_match(idx_label_cn)/cn_cpc_data_match(idx_label_cn))
+set(ax2,'FontSize',12)
+datetick('x')
+xlim(daterange)
+ax2.XTickLabel = '';
+ax2.YLabel.String = 'UHSAS/CPC';
+ax2.YLabel.FontSize = 15;
+ax2.XAxis.MinorTick = 'off';
+ax2.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax2.XAxis.TickDirection = 'out';
+ax2.YAxis.MinorTick = 'on';
+ax2.YAxis.TickDirection = 'out';
+% ax2.YLim = [0 0.8];
+title(title_string{2},'FontSize',15)
+
+
+% 'UHSAS vs Reph'
+ax3 = axes('Position',[0.08 0.7 0.80 0.25]);
+% ax3 = nexttile;
+time_stamp_bse = datenum(bse_time_label)
+idx_label_bse = find(time_stamp_bse>=daterange(1) & time_stamp_bse<daterange(2)+1/24);
+plot(time_stamp_bse(idx_label_bse),bse_uhsas_data_match(idx_label_bse)/bse_neph_data_match(idx_label_bse))
+set(ax2,'FontSize',12)
+datetick('x')
+xlim(daterange)
+ax3.XTickLabel = '';
+ax3.YLabel.String = 'UHSAS/Neph';
+ax3.YLabel.FontSize = 15;
+ax3.XAxis.MinorTick = 'off';
+ax3.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax3.XAxis.TickDirection = 'out';
+ax3.YAxis.MinorTick = 'on';
+ax3.YAxis.TickDirection = 'out';
+% ax3.YLim = [0 1.5];
+title(title_string{3},'FontSize',15)
+
+linkaxes([ax1 ax2 ax3],'x')
+
+% savefig('figname')

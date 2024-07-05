@@ -108,7 +108,7 @@ class EncoderRNN(nn.Module):
         # gru([batch_size,time_step,hidden_size],[num_layers,batch_size,hidden_size])
         # --> [batch_size,time_step,hidden_size] [num_layers,batch_size,hidden_size]
         output, hidden = self.gru(input_, hidden)
-        return output, hidden
+        return output.to(device), hidden.to(device)
 
     def inithidden(self):
         # h0: [num_layers,batch_size,hidden_size]
@@ -146,7 +146,7 @@ class AttnDecoderRNN(nn.Module):
         # encoder_outputs(v): [batch_size,121,256]
 
         # [batch_size,1] --> [batch_size,1,256]
-        embedded = self.embedding(input)
+        embedded = self.embedding(input.long())
 
         # avoid overfitting
         embedded = self.dropout(embedded)
@@ -171,7 +171,7 @@ class AttnDecoderRNN(nn.Module):
         output = self.softmax(self.out(output.squeeze()))
 
         # output[batch_size,2590] hidden[1,batch_size,256] attn_weights[1,121]
-        return output, hidden, attn_weights
+        return output.to(device), hidden.to(device), attn_weights.to(device)
 
     def inithidden(self):
         return torch.zeros(1, batch_size, self.hidden_size, device=device)
@@ -199,14 +199,14 @@ def Train_Iters(x, y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_de
             # [batch_size,1],[1,batch_size,256],[batch_size,121,256] ---> [batch_size,2950],[1,batch_size,256],[1,121]
             output_y, decode_hidden, attn_weight = my_attndecoderrnn(input_y, decode_hidden, encode_output_c)
             target_y = y[:, idx]
-            myloss = myloss + mycrossentropyloss(output_y, target_y)
+            myloss = myloss + mycrossentropyloss(output_y, target_y.long())
             input_y = target_y.unsqueeze(1)
     else:
         for idx in range(y_len):
             # [batch_size,1],[1,batch_size,256],[batch_size,121,256] ---> [batch_size,2950],[1,batch_size,256],[1,121]
             output_y, decode_hidden, attn_weight = my_attndecoderrnn(input_y, decode_hidden, encode_output_c)
             target_y = y[:, idx]
-            myloss = myloss + mycrossentropyloss(output_y, target_y)
+            myloss = myloss + mycrossentropyloss(output_y, target_y.long())
             topv, topi = output_y.topk(1)
             input_y = topi.detach()
 
@@ -231,10 +231,11 @@ train_pairs, test_pairs = train_test_split_func()
 
 
 def Train_seq2seq():
-    train_dataloader = DataLoader(dataset=train_pairs, batch_size=batch_size, shuffle=True)
+    train_dataset = MyPairsDataset(train_pairs)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
 
-    my_encoderrnn = EncoderRNN(2950, 256)
-    my_attndecoderrnn = AttnDecoderRNN(output_size=2950, hidden_size=256, dropout_p=0.1)
+    my_encoderrnn = EncoderRNN(22, 256).to(device)
+    my_attndecoderrnn = AttnDecoderRNN(output_size=2950, hidden_size=256, dropout_p=0.1).to(device)
 
     myadam_encode = optim.Adam(my_encoderrnn.parameters(), lr=mylr)
     myadam_decode = optim.Adam(my_attndecoderrnn.parameters(), lr=mylr)
@@ -248,7 +249,7 @@ def Train_seq2seq():
         print_loss_total, plot_loss_total = 0.0, 0.0
         starttime = time.time()
 
-        for item, (x, y) in enumerate(train_dataloader, start=1):
+        for item, (x, y) in enumerate(tqdm(train_dataloader), start=1):
             myloss = Train_Iters(x, y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_decode,
                                  mycrossentropyloss)
             print_loss_total += myloss

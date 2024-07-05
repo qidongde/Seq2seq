@@ -16,11 +16,11 @@ import random
 import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-batch_size = 16
+batch_size = 1
 hidden_size = 256
 # max dn/dlogp = 2590
-output_size = 2590
-epochs = 20
+output_size = 2950
+epochs = 50
 mylr = 1e-3
 dropout_p = 0.1
 print_interval_num = 50
@@ -153,14 +153,14 @@ class AttnDecoderRNN(nn.Module):
 
         # 1 attn_weights[batch_size,99]
         attn_weights = F.softmax(
-            self.attn(torch.cat((embedded.squeeze(), hidden.squeeze()), 1)), dim=1)
+            self.attn(torch.cat((embedded[:, 0, :], hidden[0, :, :]), 1)))
 
         # 2 attn_applied[1,1,256]
         # [batch_size,1,121],[batch_size,121,256] ---> [batch_size,1,256]
         attn_applied = torch.bmm(attn_weights.unsqueeze(1), encoder_outputs)
 
         # 3 output[batch_size,1,256]
-        output = torch.cat((embedded.squeeze(), attn_applied.squeeze()), 1)
+        output = torch.cat((embedded[:, 0, :], attn_applied[:, 0, :]), 1)
         output = self.attn_combine(output).unsqueeze(1)
 
         output = F.relu(output)
@@ -168,7 +168,7 @@ class AttnDecoderRNN(nn.Module):
         # [batch_size,1,256],[1,batch_size,256] --> [batch_size,1,256],[1,batch_size,256]
         output, hidden = self.gru(output, hidden)
         # [batch_size,1,256]->[batch_size,256]->[batch_size,2590]
-        output = self.softmax(self.out(output.squeeze()))
+        output = self.softmax(self.out(output[:, 0, :]))
 
         # output[batch_size,2590] hidden[1,batch_size,256] attn_weights[1,121]
         return output.to(device), hidden.to(device), attn_weights.to(device)
@@ -232,7 +232,7 @@ train_pairs, test_pairs = train_test_split_func()
 
 def Train_seq2seq():
     train_dataset = MyPairsDataset(train_pairs)
-    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, drop_last=True, shuffle=True)
 
     my_encoderrnn = EncoderRNN(22, 256).to(device)
     my_attndecoderrnn = AttnDecoderRNN(output_size=2950, hidden_size=256, dropout_p=0.1).to(device)
@@ -265,15 +265,74 @@ def Train_seq2seq():
                 plot_loss_list.append(plot_loss_avg)
                 plot_loss_total = 0
 
-        # torch.save(my_encoderrnn.state_dict(), './model_save/my_encoderrnn_%d.pth' % epoch_idx)
-        # torch.save(my_attndecoderrnn.state_dict(), './model_save/my_attndecoderrnn_%d.pth' % epoch_idx)
+        torch.save(my_encoderrnn.state_dict(), './model_save/my_encoderrnn_%d.pth' % epoch_idx)
+        torch.save(my_attndecoderrnn.state_dict(), './model_save/my_attndecoderrnn_%d.pth' % epoch_idx)
 
     plt.figure()
     plt.plot(plot_loss_list)
-    # plt.savefig('./s2sq_loss.png')
+    plt.savefig('./s2sq_loss.png')
     plt.show()
+
+
+def Seq2Seq_Evaluate(x, my_encoderrnn, my_attndecoderrnn):
+    with torch.no_grad():
+        # 1 encode_output, encode_hidden = my_encoderrnn(x, encode_hidden)
+        encode_hidden = my_encoderrnn.inithidden()
+        # [1,121,22],[1,1,256] --> [1,121,256] [1,1,256]
+        encode_output, encode_hidden = my_encoderrnn(x, encode_hidden)
+
+        # encode_output_c [1,121,256]
+        encoder_outputs_c = encode_output
+        # decode_hidden [1,1,256]
+        decode_hidden = encode_hidden
+
+        input_y = torch.zeros((batch_size, 1), device=device)
+        y_pre_list = []
+        decoder_attentions = torch.zeros(99, 121)
+        for idx in range(99):
+            output_y, decode_hidden, attn_weights = my_attndecoderrnn(input_y, decode_hidden, encoder_outputs_c)
+            topv, topi = output_y.topk(1)
+            decoder_attentions[idx] = attn_weights
+            input_y = topi.detach()
+            y_pre_list.append(topi.item())
+        return y_pre_list, decoder_attentions
+
+
+PATH1 = './model_save/my_encoderrnn_48.pth'
+PATH2 = './model_save/my_attndecoderrnn_48.pth'
+
+
+def dm_test_Attention():
+    testdataset = MyPairsDataset(test_pairs)
+    testdataloader = DataLoader(dataset=testdataset, batch_size=1, shuffle=False)
+
+    input_size = 22
+    hidden_size = 256
+    my_encoderrnn = EncoderRNN(input_size, hidden_size).to(device)
+    my_encoderrnn.load_state_dict(torch.load(PATH1))
+    # my_encoderrnn.load_state_dict(torch.load(PATH1, map_location=lambda storage, loc: storage), False)
+
+    input_size = 2950
+    hidden_size = 256
+    my_attndecoderrnn = AttnDecoderRNN(input_size, hidden_size).to(device)
+    my_attndecoderrnn.load_state_dict(torch.load(PATH2))
+    # my_attndecoderrnn.load_state_dict(torch.load(PATH2, map_location=lambda storage, loc: storage), False)
+    for item, (x, y) in enumerate(testdataloader, start=1):
+        if item == 200:
+            y_pre_list, decoder_attentions = Seq2Seq_Evaluate(x, my_encoderrnn, my_attndecoderrnn)
+            print('y_pre -->', y_pre_list)
+            print('y_true -->', y.tolist())
+
+            plt.matshow(decoder_attentions.numpy())
+
+            # plt.savefig("./s2s_attn.png")
+            plt.show()
+            # print('attentions.numpy()--->\n', attentions.numpy())
+            # print('attentions.size--->', attentions.size())
+            break
 
 
 if __name__ == '__main__':
     # dm_test_MyPairsDataset()
-    Train_seq2seq()
+    # Train_seq2seq()
+    dm_test_Attention()

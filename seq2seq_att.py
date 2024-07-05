@@ -1,3 +1,6 @@
+import math
+
+import mat73
 import numpy as np
 import pandas as pd
 import torch
@@ -14,14 +17,36 @@ import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch_size = 16
-hidden_size = 50
+hidden_size = 256
+# max dn/dlogp = 2590
+output_size = 2590
 epochs = 20
-mylr = 1e-4
+mylr = 1e-3
 dropout_p = 0.1
+print_interval_num = 50
+plot_interval_num = 10
+teacher_forcing_ratio = 0.5
 
 
 def train_test_split_func():
-    train_pairs, test_pairs = []
+    raw_data = mat73.loadmat('./Dataset_selected_2016.mat')
+    time_string = raw_data['time_selected']
+    # time_vector = raw_data['time_selected_vector']
+    input = np.array(raw_data['input_selected']).squeeze()
+    output = np.around(raw_data['output_selected'])
+
+    split_label = np.floor(time_string) % 7
+    test_filter = split_label == 3
+    train_filter = split_label != 3
+
+    x_train = np.transpose(input[train_filter, :, :], (0, 2, 1))
+    y_train = output[train_filter]
+    x_test = np.transpose(input[test_filter, :, :], (0, 2, 1))
+    y_test = output[test_filter]
+
+    train_pairs = list(zip(x_train, y_train))
+    test_pairs = list(zip(x_test, y_test))
+
     return train_pairs, test_pairs
 
 
@@ -73,7 +98,7 @@ class EncoderRNN(nn.Module):
         self.hidden_size = hidden_size
 
         self.embedding = nn.Linear(input_size, hidden_size)
-        self.gru = nn.GRU(input_size, hidden_size, batch_first=True)
+        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
 
     def forward(self, input, hidden):
         # input[batch_size,time_step,input_size]
@@ -91,81 +116,99 @@ class EncoderRNN(nn.Module):
 
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, seq_length, dropout_p=0.1):
+    def __init__(self, output_size, hidden_size, dropout_p=0.1):
+        # output_size: 2590
+        # hidden_size: 256
+        # dropout_p: 0.1
+        # max_length: 99
         super(AttnDecoderRNN, self).__init__()
-        self.input_size = input_size
+        self.output_size = output_size
         self.hidden_size = hidden_size
-        self.seq_length = seq_length
         self.dropout_p = dropout_p
 
-        self.embedding = nn.Linear(self.input_size, self.hidden_size)
-        self.attn = nn.Linear(self.hidden_size * 2, self.seq_length)
-        self.attn1_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
+        # nn.Embedding(2590,256)
+        self.embedding = nn.Embedding(self.output_size, self.hidden_size)
+        self.attn = nn.Linear(self.hidden_size * 2, 121)
+        self.attn_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
+
         self.dropout = nn.Dropout(self.dropout_p)
         self.gru = nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
 
-        self.attn2 = nn.Linear(self.hidden_size * 2, self.hidden_size)
+        # (256,2590)
+        self.out = nn.Linear(self.hidden_size, self.output_size)
+
+        # Normalization
         self.softmax = nn.LogSoftmax(dim=-1)
 
     def forward(self, input, hidden, encoder_outputs):
-        # input(q): [batch_size,1,input_size]
-        # hidden(k): [1,batch_size,hidden_size]
-        # encoder_outputs(k): [batch_size,seq_length,hidden_size]
+        # input(q): [batch_size,1]
+        # hidden(k): [1,batch_size,256]
+        # encoder_outputs(v): [batch_size,121,256]
 
-        # embedded: [batch_size,1,input_size] --> [batch_size,1,hidden_size]
-        embedded = F.relu(self.embedding(input))
+        # [batch_size,1] --> [batch_size,1,256]
+        embedded = self.embedding(input)
+
+        # avoid overfitting
         embedded = self.dropout(embedded)
 
-        # attn1_weights: [batch_size,seq_length]
-        attn1_weights = F.softmax(
+        # 1 attn_weights[batch_size,99]
+        attn_weights = F.softmax(
             self.attn(torch.cat((embedded.squeeze(), hidden.squeeze()), 1)), dim=1)
 
-        # attn_applied[batch_size,1,hidden_size]
-        # [batch_size,1,seq_length],[batch_size,seq_length,hidden_size] ---> [batch_size,1,hidden_size]
-        attn_applied = torch.bmm(attn1_weights.unsqueeze(1), encoder_outputs)
+        # 2 attn_applied[1,1,256]
+        # [batch_size,1,121],[batch_size,121,256] ---> [batch_size,1,256]
+        attn_applied = torch.bmm(attn_weights.unsqueeze(1), encoder_outputs)
 
-        # weighted_input[batch_size,1,hidden_size]
-        weighted_input = torch.cat((embedded.squeeze(), attn_applied.squeeze()), 1)
-        weighted_input = self.attn_combine(weighted_input).unsqueeze(0)
-        weighted_input = F.relu(weighted_input)
+        # 3 output[batch_size,1,256]
+        output = torch.cat((embedded.squeeze(), attn_applied.squeeze()), 1)
+        output = self.attn_combine(output).unsqueeze(1)
 
-        # output: [batch_size,1,hidden_size]
-        # hidden: [1,batch_size,hidden_size]
-        output, hidden = self.gru(weighted_input, hidden)
+        output = F.relu(output)
 
-        # attn2_weights: [batch_size,hidden_size]
-        attn2_weights = F.softmax(
-            self.attn2(torch.cat((embedded.squeeze(), encoder_outputs[:, -1, :]), 1)), dim=1)
+        # [batch_size,1,256],[1,batch_size,256] --> [batch_size,1,256],[1,batch_size,256]
+        output, hidden = self.gru(output, hidden)
+        # [batch_size,1,256]->[batch_size,256]->[batch_size,2590]
+        output = self.softmax(self.out(output.squeeze()))
 
-        # [batch_size,1,hidden_size],[batch_size,hidden_size,1] ---> [batch_size,1,1]
-        output = torch.bmm(output, attn2_weights.unsqueeze(-1)).squeeze()
-
-        return output, hidden, attn1_weights, attn2_weights
+        # output[batch_size,2590] hidden[1,batch_size,256] attn_weights[1,121]
+        return output, hidden, attn_weights
 
     def inithidden(self):
         return torch.zeros(1, batch_size, self.hidden_size, device=device)
 
 
-def Train_Iters(x, y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_decode, mse_loss):
-    # encode_output, encode_hidden = my_encoderrnn(x, encode_hidden)
+def Train_Iters(x, y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_decode, mycrossentropyloss):
+    # 1 encode_output, encode_hidden = my_encoderrnn(x, encode_hidden)
     encode_hidden = my_encoderrnn.inithidden()
+    # [batch_size,121,22],[1,batch_size,256] --> [batch_size,121,256] [1,batch_size,256]
     encode_output, encode_hidden = my_encoderrnn(x, encode_hidden)
-    # [batch_size,121,25],[1,batch_size,hidden_size]
-    # --> [batch_size,121,hidden_size],[1,batch_size,hidden_size]
-    # encode_output_c [batch_size,121,hidden_size]
 
+    # encode_output_c [batch_size,121,256]
+    encode_output_c = encode_output
+    # decode_hidden [1,batch_size,256]
     decode_hidden = encode_hidden
 
+    input_y = torch.zeros((batch_size, 1), device=device)
+
     myloss = 0.0
-    input_y = torch.zeros((batch_size, 1, decode_hidden), device=device)
     y_len = y.shape[1]
-    y_pre = torch.zeros(batch_size, y_len, device=device)
-    for idx in range(y_len):
-        output_y, decode_hidden, attn_weight = my_attndecoderrnn(input_y, decode_hidden, encode_output)
-        y_pre[:, idx] = output_y
-        y_true = y[:, idx]
-        myloss += mse_loss(output_y, y_true)
-        input_y = output_y.detach()
+
+    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+    if use_teacher_forcing:
+        for idx in range(y_len):
+            # [batch_size,1],[1,batch_size,256],[batch_size,121,256] ---> [batch_size,2950],[1,batch_size,256],[1,121]
+            output_y, decode_hidden, attn_weight = my_attndecoderrnn(input_y, decode_hidden, encode_output_c)
+            target_y = y[:, idx]
+            myloss = myloss + mycrossentropyloss(output_y, target_y)
+            input_y = target_y.unsqueeze(1)
+    else:
+        for idx in range(y_len):
+            # [batch_size,1],[1,batch_size,256],[batch_size,121,256] ---> [batch_size,2950],[1,batch_size,256],[1,121]
+            output_y, decode_hidden, attn_weight = my_attndecoderrnn(input_y, decode_hidden, encode_output_c)
+            target_y = y[:, idx]
+            myloss = myloss + mycrossentropyloss(output_y, target_y)
+            topv, topi = output_y.topk(1)
+            input_y = topi.detach()
 
     myadam_encode.zero_grad()
     myadam_decode.zero_grad()
@@ -175,44 +218,59 @@ def Train_Iters(x, y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_de
     myadam_encode.step()
     myadam_decode.step()
 
-    return y_pre, y
+    return myloss.item() / y_len
+
+
+def vec_cos_similarity(vec1, vec2):
+    cos_similarity = np.sum(vec1 * vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+    return cos_similarity
+
+
+train_pairs, test_pairs = train_test_split_func()
 
 
 def Train_seq2seq():
-    train_pairs, test_pairs = train_test_split_func()
+    train_dataloader = DataLoader(dataset=train_pairs, batch_size=batch_size, shuffle=True)
 
-    train_dataset = MyPairsDataset(train_pairs)
-    test_dataset = MyPairsDataset(test_pairs)
-    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    test_dataloader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    my_encoderrnn = EncoderRNN(2950, 256)
+    my_attndecoderrnn = AttnDecoderRNN(output_size=2950, hidden_size=256, dropout_p=0.1)
 
-    my_encoderrnn = EncoderRNN(25, hidden_size)
-    my_attndecoderrnn = AttnDecoderRNN(hidden_size, hidden_size, 121, dropout_p=dropout_p)
     myadam_encode = optim.Adam(my_encoderrnn.parameters(), lr=mylr)
     myadam_decode = optim.Adam(my_attndecoderrnn.parameters(), lr=mylr)
 
-    mse_loss = nn.MSELoss(reduction='sum')
+    mycrossentropyloss = nn.NLLLoss()
 
-    for epoch_idx in range(1, epochs + 1):
-        train_y_true = []
-        train_y_pre = []
-        test_y_true = []
-        test_y_pre = []
+    plot_loss_list = []
 
-        my_encoderrnn.train()
-        my_attndecoderrnn.train()
-        for train_item, (train_x, train_y) in enumerate(tqdm(train_dataloader), start=1):
-            y_pre, y = Train_Iters(train_x, train_y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_decode, mse_loss)
+    for epoch_idx in range(1, 1 + epochs):
 
-            train_y_true.extend(y.squeeze().tolist())
-            train_y_pre.extend(y_pre.squeeze().tolist())
+        print_loss_total, plot_loss_total = 0.0, 0.0
+        starttime = time.time()
 
-        eval_loss = nn.MSELoss()
-        train_rmse_loss = np.sqrt(eval_loss(train_y_true, train_y_pre))
-        
-        print(f'The result of epoch{epoch_idx}:')
-        print("Train RMSELoss:", train_rmse_loss)
-        print("*" * 50)
+        for item, (x, y) in enumerate(train_dataloader, start=1):
+            myloss = Train_Iters(x, y, my_encoderrnn, my_attndecoderrnn, myadam_encode, myadam_decode,
+                                 mycrossentropyloss)
+            print_loss_total += myloss
+            plot_loss_total += myloss
+
+            if item % print_interval_num == 0:
+                print_loss_avg = print_loss_total / print_interval_num
+                print_loss_total = 0
+                print('Epochs: %d  Loss: %.6f Time:%d' % (epoch_idx, print_loss_avg, time.time() - starttime))
+
+            if item % plot_interval_num == 0:
+                plot_loss_avg = plot_loss_total / plot_interval_num
+                plot_loss_list.append(plot_loss_avg)
+                plot_loss_total = 0
+
+        # torch.save(my_encoderrnn.state_dict(), './model_save/my_encoderrnn_%d.pth' % epoch_idx)
+        # torch.save(my_attndecoderrnn.state_dict(), './model_save/my_attndecoderrnn_%d.pth' % epoch_idx)
+
+    plt.figure()
+    plt.plot(plot_loss_list)
+    # plt.savefig('./s2sq_loss.png')
+    plt.show()
 
 
 if __name__ == '__main__':

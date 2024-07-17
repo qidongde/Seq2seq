@@ -2,12 +2,12 @@
 % Missing values ​​are replaced by NaN
 clear;
 
-load('UHSAS_2016.mat');
+load('UHSAS_2023.mat');
 % Dp_ = mean(Dp_bounds,1)';
 
 % Select one time period
-t1 = datetime(2016,1,5,0,0,0);
-t2 = datetime(2017,1,1,0,0,0);
+t1 = datetime(2023,1,1,0,0,0);
+t2 = datetime(2024,1,1,0,0,0);
 t = t1:seconds(1):t2;
 uhsas_time_second=t';
 
@@ -20,15 +20,20 @@ data_position = round(data_position,TieBreaker="minusinf");
 uhsas_cn_second = NaN(numel(t),1);
 uhsas_cn_second(data_position,:) = N_selected;
 
+sys_filter_1 = and(datenum(t')>=737741,datenum(t')<=738400);
+sys_filter_2 = and(datenum(t')>=737840,datenum(t')<=737939);
+sys_filter = sys_filter_1 | sys_filter_2;
+uhsas_cn_second(sys_filter,:) = NaN;
+
 % uhsas_size_dist_second = NaN(numel(t),99);
 % uhsas_size_dist_second(data_position,:)=dN_dlogDp;
 
-save( 'uhsas_secondly_selected_time_2016.mat', 'uhsas_cn_second', "uhsas_time_second");
+save( 'uhsas_secondly_selected_time_2023.mat', 'uhsas_cn_second', "uhsas_time_second");
 
 %% step1 iforest data preprocess
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 
 CN_1min.ave = movmean(uhsas_cn_second,61,'omitnan');
 CN_1min.std = movstd(uhsas_cn_second,61,'omitnan');
@@ -50,12 +55,12 @@ CN_30min.std = movstd(uhsas_cn_second,1801,'omitnan');
 CN_30min.median = movmedian(uhsas_cn_second,1801,'omitnan');
 uhsas_CN_1sContinuous.CN_30min_moving = CN_30min;
 
-save('uhsas_secondly_selected_time_2016.mat','uhsas_CN_1sContinuous','-append')
+save('uhsas_secondly_selected_time_2023.mat','uhsas_CN_1sContinuous','-append')
 
 %% Step1 iforest filter
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 
 % Feature engineering:
 % CN_raw – CN_30minMedian
@@ -92,12 +97,12 @@ scores(ID_valid) = scores1;
 uhsas_CN_1sContinuous.iForest.AnomalyScore = scores;
 uhsas_CN_1sContinuous.iForest.isAnomaly = iforest_label; 
 
-save('uhsas_secondly_selected_time_2016.mat','uhsas_CN_1sContinuous','-append')
+save('uhsas_secondly_selected_time_2023.mat','uhsas_CN_1sContinuous','-append')
 
 %% Score hist --> determine the threshold
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 
 y1 = uhsas_CN_1sContinuous.iForest.AnomalyScore;
 ID_valid = find(~isnan(y1));
@@ -127,7 +132,7 @@ grid on;
 %% step1 result visualization
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 scores = uhsas_CN_1sContinuous.iForest.AnomalyScore;
 threshold = 0.55;
 
@@ -155,7 +160,7 @@ hold off;
 %% Step2 iforest data preprocess
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 
 uhsas_CN_1sContinuous_2.cn = uhsas_cn_second;
 uhsas_CN_1sContinuous_2.cn(uhsas_CN_1sContinuous.iForest.isAnomaly~=0) = NaN;
@@ -175,7 +180,7 @@ CN_60min.std = movstd(uhsas_CN_1sContinuous_2.cn,3601,'omitnan');
 CN_60min.median = movmedian(uhsas_CN_1sContinuous_2.cn,3601,'omitnan');
 uhsas_CN_1sContinuous_2.CN_60min_moving = CN_60min;
 
-save('uhsas_secondly_selected_time_2016.mat','uhsas_CN_1sContinuous_2','-append')
+save('uhsas_secondly_selected_time_2023.mat','uhsas_CN_1sContinuous_2','-append')
 
 %% Step2 iforest filter
 
@@ -205,12 +210,12 @@ scores(ID_valid) = scores2;
 uhsas_CN_1sContinuous_2.iForest.isAnomaly = tf;
 uhsas_CN_1sContinuous_2.iForest.AnomalyScore = scores;
 
-save('uhsas_secondly_selected_time_2016.mat','uhsas_CN_1sContinuous_2','-append')
+save('uhsas_secondly_selected_time_2023.mat','uhsas_CN_1sContinuous_2','-append')
 
 %% Score hist --> determine the threshold
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 
 y1 = uhsas_CN_1sContinuous_2.iForest.AnomalyScore;
 ID_valid = find(~isnan(y1));
@@ -239,7 +244,7 @@ grid on;
 %% step2 result visualization
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 scores_1 = uhsas_CN_1sContinuous.iForest.AnomalyScore;
 scores_2 = uhsas_CN_1sContinuous_2.iForest.AnomalyScore;
 threshold_1 = 0.55;
@@ -281,7 +286,7 @@ hold off;
 %% Step3 data preprocess
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 uhsas_CN_1sContinuous_3.cn = uhsas_CN_1sContinuous_2.cn;
 uhsas_CN_1sContinuous_3.cn(uhsas_CN_1sContinuous_2.iForest.isAnomaly~=0) = NaN;
 
@@ -323,12 +328,12 @@ for i = 1:event_num
 end
 uhsas_CN_1sContinuous_3.spikyflag(isnan(uhsas_CN_1sContinuous_3.cn)) = NaN;
 
-save('uhsas_secondly_selected_time_2016.mat','uhsas_CN_1sContinuous_3','-append')
+save('uhsas_secondly_selected_time_2023.mat','uhsas_CN_1sContinuous_3','-append')
 
 %% Score hist --> determine the threshold
 clear;
 
-load('uhsas_secondly_selected_time.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 
 y1 = uhsas_CN_1sContinuous_3.CN_60min_moving.std;
 ID_valid = find(~isnan(y1));
@@ -348,7 +353,7 @@ ylim([0,100]);
 ylabel('Percentage');
 
 yyaxis right; 
-nbins = 50;
+nbins = 200;
 histogram(y1,nbins);
 % title('Title');
 xlim([0,200]);
@@ -358,7 +363,7 @@ grid on;
 %% step3 result visualization
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
 scores_1 = uhsas_CN_1sContinuous.iForest.AnomalyScore;
 scores_2 = uhsas_CN_1sContinuous_2.iForest.AnomalyScore;
 threshold_1 = 0.55;
@@ -396,6 +401,8 @@ scatter(x3,y3,'.');
 
 hold on;
 scatter(x4,y4,'.');
+% daterange = [datenum(2021,1,1,0,0,0) datenum(2022,1,1,0,0,0)];
+% xlim(daterange);
 xlim([t(1),t(end)]);
 ylim([0,2000]); 
 % set(gca,'xtick',t(1):5:t(end));
@@ -405,13 +412,13 @@ hold off;
 %% clean hourly data
 clear;
 
-load('uhsas_secondly_selected_time_2016.mat');
-load('UHSAS_2016.mat');
+load('uhsas_secondly_selected_time_2023.mat');
+load('UHSAS_2023.mat');
 Dp_ = mean(Dp_bounds,1)';
 
 % uhsas size distribution data secondly
-t1 = datetime(2016,1,5,0,0,0);
-t2 = datetime(2017,1,1,0,0,0);
+t1 = datetime(2023,1,1,0,0,0);
+t2 = datetime(2024,1,1,0,0,0);
 time_filter = and(Time_UHSAS>datenum(t1),Time_UHSAS<datenum(t2));
 dN_dlogDp_selected = dN_dlogDp(time_filter,:);
 Time_selected = Time_UHSAS(time_filter);
@@ -444,8 +451,8 @@ for i=1:99
 end
 
 % Data organization
-t1 = datetime(2016,1,5,0,0,0);
-t2 = datetime(2017,1,1,0,0,0);
+% t1 = datetime(2014,1,1,0,0,0);
+% t2 = datetime(2015,1,1,0,0,0);
 t = t1:hours(1):t2;
 uhsas_time_hour=t';
 
@@ -457,13 +464,13 @@ uhsas_sd_hour_all(data_position,:) = uhsas_sd_hour;
 uhsas_cn_hour_all = NaN(numel(uhsas_time_hour),1);
 uhsas_cn_hour_all(data_position,:) = uhsas_cn_hour;
 
-save('uhsas_clean_data_hourly_2016.mat','uhsas_sd_hour_all', 'uhsas_cn_hour_all','uhsas_time_hour', 'Dp_');
+save('uhsas_clean_data_hourly_2023.mat','uhsas_sd_hour_all', 'uhsas_cn_hour_all','uhsas_time_hour', 'Dp_');
 %% visualization of clean data
 clear;
 
-load('uhsas_clean_data_hourly_2016.mat');
+load('uhsas_clean_data_hourly_2023.mat');
 
-daterange = [datenum(2016,1,1,0,0,0) datenum(2017,1,1,0,0,0)];
+daterange = [datenum(2023,1,1,0,0,0) datenum(2024,1,1,0,0,0)];
 
 
 title_string = {'Size distribution','CN'};
@@ -551,3 +558,6 @@ semilogx(Dp_,uhsas_sd_hour_all(6,:),Dp_,uhsas_sd_hour_all(16,:), ...
 legend('Time 1','Time 2','Time 3','Time 4', 'Time 5', 'Time 6');
 xlabel('D_p (nm)');
 ylabel('d{\itN}/d{\itlogD_p} (cm^{–3})');
+
+
+

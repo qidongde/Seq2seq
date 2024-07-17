@@ -9,9 +9,9 @@ time_vec = datevec(Time_UHSAS);
 time_vec_hourly = [year month day hour];
 
 % Hourly total concentration median
-Dp_range = log(Dp_bounds(2,:))-log(Dp_bounds(1,:));
-Dp_sum = dN_dlogDp * Dp_range';
-sum_median_hourly = splitapply(@median,Dp_sum,G);
+% Dp_range = log10(Dp_bounds(2,:))-log10(Dp_bounds(1,:));
+% Dp_sum = dN_dlogDp * Dp_range';
+sum_median_hourly = splitapply(@median,N,G);
 
 % Hourly size distribution median
 size_dist_median_hourly = []
@@ -42,20 +42,25 @@ nan_label = isnan(cpc_data_match);
 cn_uhsas_data_match = uhsas_data_match(~nan_label);
 cn_cpc_data_match = cpc_data_match(~nan_label);
 time_label = time_label(~nan_label,:);
-cn_time_label_match = [time_label,zeros(size(time_label,1),2)]
-
+cn_time_label_match = [time_label,zeros(size(time_label,1),2)];
 
 
 save( 'cn_data_match_2024.mat', 'cn_uhsas_data_match', 'cn_cpc_data_match',"cn_time_label_match");
 %% uhsas vs cpc test
+clear;
 
+load('Uhsas_2018_hourly.mat');
+load('cn_data_match_2018.mat');
+load('CN_hourly_2013_2024.mat');
+
+cpc_time = [time_all(:,1:3),time_all(:,4)-0.5];
 time_stamp = datenum(cn_time_label_match);
 time_stamp2 = datenum([cpc_time,zeros(size(cpc_time,1),2)]);
 daterange = [datenum(2018,4,1,4,0,0) datenum(2018,9,30)];
 idx_label = find(time_stamp>=daterange(1) & time_stamp<daterange(2)+1/24);
 idx_label2 = find(time_stamp2>=daterange(1) & time_stamp2<daterange(2)+1/24);
 
-tiledlayout(2,1)
+tiledlayout(2,1);
 
 ax1 = nexttile;
 scatter(ax1,time_stamp2(idx_label2),CN_all(idx_label2,1))
@@ -112,12 +117,12 @@ uhsas_time_vec_hourly = [time_vec_hourly,zeros(size(time_vec_hourly,1),2)];
 
 t1 = datetime(2024,1,1,0,0,0);
 t2 = datetime(2025,1,1,0,0,0);
-t = t1:hours(1):t2
-uhsas_time=t'
+t = t1:hours(1):t2;
+uhsas_time=t';
 
-data_label1 = hours(datetime(uhsas_time_vec_hourly)-t1)+1
-uhsas_size_dist_full = NaN(numel(t),99)
-uhsas_size_dist_full(data_label1,:)=uhsas_size_dist
+data_label1 = hours(datetime(uhsas_time_vec_hourly)-t1)+1;
+uhsas_size_dist_full = NaN(numel(t),99);
+uhsas_size_dist_full(data_label1,:)=uhsas_size_dist;
 
 data_label2 = hours(datetime(cn_time_label_match)-t1)+1
 cn_cpc_data_match_full = NaN(numel(t),1)
@@ -138,13 +143,13 @@ save( 'agg_data_2024.mat', 'uhsas_size_dist_full','uhsas_Dp_bins', ...
 %% visualization
 clear;
 
-load('agg_data_2024.mat');
+load('agg_data_2023.mat');
 
 % Sys error filter
 sys_error_label = zeros(size(uhsas_time));
 
 % hyperparameter
-a = 0.25
+a = 0.25;
 p = [0.25,0.75];
 
 % CN filter
@@ -163,11 +168,11 @@ lower_bound_bse = q_bse(1) - a*IQR_bse;
 upper_bound_bse = q_bse(2) + a*IQR_bse;
 Bse_label = or(bse_ratio>upper_bound_bse,bse_ratio<lower_bound_bse);
 
-label_agg = and(CN_label,Bse_label)
-sys_error_label(label_agg)=1
+label_agg = and(CN_label,Bse_label);
+sys_error_label(label_agg)=1;
 
 
-daterange = [datenum(2024,1,1,0,0,0) datenum(2024,6,1,0,0,0)];
+daterange = [datenum(2023,1,1,0,0,0) datenum(2024,1,1,0,0,0)];
 
 
 title_string = {'UHSAS heatmap','CN', 'Bse'};
@@ -183,15 +188,15 @@ time_uhsas_heated = datenum(uhsas_time)
 idx_uhsas_heated = find(time_uhsas_heated>=daterange(1) & time_uhsas_heated<daterange(2));
 
 sys_label=sys_error_label(idx_uhsas_heated);
-x_all = time_uhsas_heated(idx_uhsas_heated)
-tmp1 = uhsas_size_dist_full(idx_uhsas_heated,:)
+x_all = time_uhsas_heated(idx_uhsas_heated);
+tmp1 = uhsas_size_dist_full(idx_uhsas_heated,:)*log(10);
 PC1 = pcolor(x_all,uhsas_Dp_bins,tmp1');
 
-set(PC1,'EdgeColor','none')
-caxis([0 1200])
+set(PC1,'EdgeColor','none');
+caxis([0 1200]);
 ax1.YScale = 'log';
-set(ax1,'FontSize',12)
-xlim(daterange)
+set(ax1,'FontSize',12);
+xlim(daterange);
 datetick('x','yyyy-mm-dd')
 % ax1.XTickLabel = '';
 ax1.YLabel.String = 'D_p (nm)';
@@ -238,6 +243,7 @@ ax2.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
 ax2.XAxis.TickDirection = 'out';
 ax2.YAxis.MinorTick = 'off';
 ax2.YAxis.TickDirection = 'out';
+ax2.YLim = [0 1];
 
 title(title_string{2},'FontSize',15)
 
@@ -263,7 +269,7 @@ ax3.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
 ax3.XAxis.TickDirection = 'out';
 ax3.YAxis.MinorTick = 'off';
 ax3.YAxis.TickDirection = 'out';
-% ax3.YLim = [0 1.5];
+ax3.YLim = [0 3];
 title(title_string{3},'FontSize',15)
 
 linkaxes([ax1 ax2 ax3],'x')
@@ -316,7 +322,7 @@ time_uhsas_heated = datenum(time_vec)
 idx_uhsas_heated = find(time_uhsas_heated>=daterange(1) & time_uhsas_heated<daterange(2));
 
 tmp1 = uhsas_size_dist_full(idx_uhsas_heated,:)
-PC1 = pcolor(time_uhsas_heated(idx_uhsas_heated),uhsas_Dp_bins,tmp1');
+PC1 = pcolor(time_uhsas_heated(idx_uhsas_heated)*log(10),uhsas_Dp_bins,tmp1');
 
 set(PC1,'EdgeColor','none')
 caxis([0 1200])
@@ -354,7 +360,7 @@ load('agg_data_2014.mat');
 sys_error_label = zeros(size(uhsas_time));
 
 % hyperparameter
-a = 3
+a = 3;
 p = [0.25,0.75];
 
 % CN filter
@@ -373,9 +379,209 @@ lower_bound_bse = q_bse(1) - a*IQR_bse;
 upper_bound_bse = q_bse(2) + a*IQR_bse;
 Bse_label = or(bse_ratio>upper_bound_bse,bse_ratio<lower_bound_bse);
 
-label_agg = and(CN_label,Bse_label)
-sys_error_label(label_agg)=1
+label_agg = and(CN_label,Bse_label);
+sys_error_label(label_agg)=1;
 
-linkaxes([ax1 ax2 ax3],'x')
+%% CN error analysis
+clear;
+
+load('agg_data_2015.mat');
+
+% Sys error filter
+sys_error_label = zeros(size(uhsas_time));
+
+% hyperparameter
+a = 0.25;
+p = [0.25,0.75];
+
+% CN filter
+cn_ratio = cn_uhsas_data_match_full./cn_cpc_data_match_full;
+q_cn = quantile(cn_ratio,p);
+IQR_cn = q_cn(2)-q_cn(1);
+lower_bound_cn = q_cn(1) - a*IQR_cn;
+upper_bound_cn = q_cn(2) + a*IQR_cn;
+CN_label = or(cn_ratio>upper_bound_cn,cn_ratio<lower_bound_cn);
+
+% Bse filter
+bse_ratio = bse_uhsas_data_match_full./bse_neph_data_match_full;
+q_bse = quantile(bse_ratio,p);
+IQR_bse = q_bse(2)-q_bse(1);
+lower_bound_bse = q_bse(1) - a*IQR_bse;
+upper_bound_bse = q_bse(2) + a*IQR_bse;
+Bse_label = or(bse_ratio>upper_bound_bse,bse_ratio<lower_bound_bse);
+
+label_agg = and(CN_label,Bse_label);
+sys_error_label(label_agg)=1;
+
+
+daterange = [datenum(2015,1,1,0,0,0) datenum(2016,1,1,0,0,0)];
+
+
+fig = figure;
+set(fig,'Color','w','Position',[100 100 1800 800])
+
+
+% UHSAS_CN
+ax1 = axes('Position',[0.08 0.08 0.80 0.25]);
+% ax1 = nexttile;
+time_uhsas_heated = datenum(uhsas_time)
+idx_uhsas_heated = find(time_uhsas_heated>=daterange(1) & time_uhsas_heated<daterange(2));
+
+sys_label=sys_error_label(idx_uhsas_heated);
+x_all = time_uhsas_heated(idx_uhsas_heated);
+
+
+plot(x_all,cn_uhsas_data_match_full(idx_uhsas_heated));
+hold on
+scatter(x_all,cn_cpc_data_match_full(idx_uhsas_heated),'.');
+legend('Uhsas','CPC');
+
+set(ax1,'FontSize',12);
+datetick('x');
+ax1.XLim = daterange;
+datetick('x','yyyy-mm-dd');
+% ax1.XTickLabel = '';
+ax1.YLabel.String = 'CN';
+ax1.YLabel.FontSize = 15;
+ax1.XAxis.MinorTick = 'off';
+ax1.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax1.XAxis.TickDirection = 'out';
+ax1.YAxis.MinorTick = 'off';
+ax1.YAxis.TickDirection = 'out';
+% ax1.YLim = [0 3000];
+title('CN','FontSize',15)
+
+
+
+% 'UHSAS vs CPC ratio'
+ax2 = axes('Position',[0.08 0.58 0.80 0.25]);
+
+cn_y = cn_ratio(idx_uhsas_heated)
+normal = find(sys_label==0);
+sys_error = find(sys_label==1);
+
+plot(x_all(normal),cn_y(normal));
+hold on
+scatter(x_all(sys_error),cn_y(sys_error),'x');
+legend('Normal','Sys error')
+
+set(ax2,'FontSize',12)
+datetick('x');
+xlim(daterange);
+ax2.XTickLabel = '';
+ax2.YLabel.String = 'UHSAS/CPC';
+ax2.YLabel.FontSize = 15;
+ax2.XAxis.MinorTick = 'off';
+ax2.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax2.XAxis.TickDirection = 'out';
+ax2.YAxis.MinorTick = 'off';
+ax2.YAxis.TickDirection = 'out';
+ax2.YLim = [0 1];
+
+title('Ratio','FontSize',15)
+
+linkaxes([ax1 ax2],'x')
+
+% savefig('figname')
+
+%% Bse error analysis
+clear;
+
+load('agg_data_2020.mat');
+
+% Sys error filter
+sys_error_label = zeros(size(uhsas_time));
+
+% hyperparameter
+a = 0.25;
+p = [0.25,0.75];
+
+% CN filter
+cn_ratio = cn_uhsas_data_match_full./cn_cpc_data_match_full;
+q_cn = quantile(cn_ratio,p);
+IQR_cn = q_cn(2)-q_cn(1);
+lower_bound_cn = q_cn(1) - a*IQR_cn;
+upper_bound_cn = q_cn(2) + a*IQR_cn;
+CN_label = or(cn_ratio>upper_bound_cn,cn_ratio<lower_bound_cn);
+
+% Bse filter
+bse_ratio = bse_uhsas_data_match_full./bse_neph_data_match_full;
+q_bse = quantile(bse_ratio,p);
+IQR_bse = q_bse(2)-q_bse(1);
+lower_bound_bse = q_bse(1) - a*IQR_bse;
+upper_bound_bse = q_bse(2) + a*IQR_bse;
+Bse_label = or(bse_ratio>upper_bound_bse,bse_ratio<lower_bound_bse);
+
+label_agg = and(CN_label,Bse_label);
+sys_error_label(label_agg)=1;
+
+
+daterange = [datenum(2020,1,1,0,0,0) datenum(2021,1,1,0,0,0)];
+
+
+fig = figure;
+set(fig,'Color','w','Position',[100 100 1800 800])
+
+
+% UHSAS_Nep
+ax1 = axes('Position',[0.08 0.08 0.80 0.25]);
+% ax1 = nexttile;
+time_uhsas_heated = datenum(uhsas_time)
+idx_uhsas_heated = find(time_uhsas_heated>=daterange(1) & time_uhsas_heated<daterange(2));
+
+sys_label=sys_error_label(idx_uhsas_heated);
+x_all = time_uhsas_heated(idx_uhsas_heated);
+
+
+plot(x_all,bse_uhsas_data_match_full(idx_uhsas_heated));
+hold on
+scatter(x_all,bse_neph_data_match_full(idx_uhsas_heated),'.');
+legend('Uhsas','Neph');
+
+set(ax1,'FontSize',12);
+% datetick('x');
+ax1.XLim = daterange;
+title('Bse','FontSize',15);
+datetick('x','yyyy-mm-dd');
+ax1.YLabel.String = 'CN';
+ax1.YLabel.FontSize = 15;
+ax1.XAxis.MinorTick = 'off';
+ax1.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax1.XAxis.TickDirection = 'out';
+ax1.YAxis.MinorTick = 'off';
+ax1.YAxis.TickDirection = 'out';
+% ax1.YLim = [0 3000];
+
+
+
+
+% 'UHSAS vs Nep ratio'
+ax2 = axes('Position',[0.08 0.58 0.80 0.25]);
+
+cn_y = bse_ratio(idx_uhsas_heated)
+normal = find(sys_label==0);
+sys_error = find(sys_label==1);
+
+plot(x_all(normal),cn_y(normal));
+hold on
+scatter(x_all(sys_error),cn_y(sys_error),'x');
+legend('Normal','Sys error')
+
+set(ax2,'FontSize',12)
+datetick('x');
+xlim(daterange);
+ax2.XTickLabel = '';
+ax2.YLabel.String = 'UHSAS/Neph';
+ax2.YLabel.FontSize = 15;
+ax2.XAxis.MinorTick = 'off';
+ax2.XAxis.MinorTickValues = [daterange(1):30:daterange(2)];
+ax2.XAxis.TickDirection = 'out';
+ax2.YAxis.MinorTick = 'off';
+ax2.YAxis.TickDirection = 'out';
+ax2.YLim = [0 3];
+
+title('Ratio','FontSize',15)
+
+linkaxes([ax1 ax2],'x')
 
 % savefig('figname')

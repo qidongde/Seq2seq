@@ -1,3 +1,4 @@
+
 %% Data correction
 clear;
 
@@ -16,16 +17,26 @@ ylabel('d{\itN}/d{\itlogD_p} (cm^{–3})');
 %% Data match
 clear;
 
-load('uhsas_clean_data_hourly_2016.mat');
+load('uhsas_clean_data_hourly_2014_2023.mat');
 load('ENA_ML_input_features_2013_2023_v4.mat');
+load('shoreline_flag.mat');
 
 % data correction
-uhsas_sd_hour_all(:,52)=(uhsas_sd_hour_all(:,51)+uhsas_sd_hour_all(:,53))/2;
-uhsas_sd_hour_all(:,27)=(uhsas_sd_hour_all(:,28)+uhsas_sd_hour_all(:,26))/2;
+Uhsas_sd_hour_all(:,52)=(Uhsas_sd_hour_all(:,51)+Uhsas_sd_hour_all(:,53))/2;
+Uhsas_sd_hour_all(:,27)=(Uhsas_sd_hour_all(:,28)+Uhsas_sd_hour_all(:,26))/2;
 
-t1 = uhsas_time_hour(1,:);
-t2 = uhsas_time_hour(end,:);
+t1 = Uhsas_time_hour(1,:);
+t2 = Uhsas_time_hour(end,:);
 
+% shoreline filter
+time_shoreline = time_1h(:,7);
+time_shoreline_filter = and(time_shoreline >= datenum(t1),time_shoreline <= datenum(t2));
+shorelineflag_sel = shorelineflag(time_shoreline_filter);
+time_1h_sel = time_1h(time_shoreline_filter,:);
+shorelineflag_filter = find(shorelineflag_sel==1);
+Uhsas_sd_hour_all(shorelineflag_filter,:) = NaN;
+
+% data match
 Time_input = time_traj(:,7);
 time_filter = and(Time_input >= datenum(t1),Time_input <= datenum(t2));
 Time_input_selected = Time_input(time_filter);
@@ -33,7 +44,7 @@ X_raw_selected = X_raw(time_filter);
 
 data_position = hours(datetime(Time_input_selected,'ConvertFrom','datenum')-t1)+1;
 data_position = round(data_position,TieBreaker="minusinf");
-uhsas_sd_hour_selected = uhsas_sd_hour_all(data_position,:);
+uhsas_sd_hour_selected = Uhsas_sd_hour_all(data_position,:);
 
 % remove missing value
 nan_filter = ~any(isnan(uhsas_sd_hour_selected),2);
@@ -42,16 +53,16 @@ output_selected = uhsas_sd_hour_selected(nan_filter,:);
 time_selected = Time_input_selected(nan_filter);
 
 time_selected_vector = datevec(time_selected);
-save( 'Dataset_selected_2016.mat', 'input_selected', "output_selected",'time_selected_vector','Dp_');
+save( 'Dataset_input_output_2014_2023.mat', 'input_selected', "output_selected",'time_selected_vector','time_selected', 'Dp_');
 
 %% Data visialization
 clear;
 
-load('Dataset_selected_2016.mat');
+load('Dataset_input_output_2014_2023.mat');
 
 % fill missing value with NaN
-t1 = datetime(2016,1,1,0,0,0);
-t2 = datetime(2017,1,1,0,0,0);
+t1 = datetime(2014,1,1,0,0,0);
+t2 = datetime(2024,1,1,0,0,0);
 t = t1:hours(1):t2;
 time_hour=t';
 
@@ -65,7 +76,7 @@ uhsas_sd_hour = NaN(numel(t),99);
 uhsas_sd_hour(data_position,:) = output_selected;
 
 % visualization
-daterange = [datenum(2016,1,1,0,0,0) datenum(2017,1,1,0,0,0)];
+daterange = [datenum(t1) datenum(t2)];
 
 
 title_string = {'Size distribution','CN'};
